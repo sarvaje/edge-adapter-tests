@@ -47,7 +47,8 @@ const startToListen = async (id) => {
             const { DOM } = client;
 
             // const elements = await DOM.getDocument({ depth: -1 });
-            const elements = await DOM.querySelectorAll({ nodeId: 1, selector: 'div' });
+            const document = await DOM.getDocument();
+            const elements = await DOM.querySelectorAll({ nodeId: document.root.nodeId, selector: 'div' });
             console.log('aham!!');
             // client.close();
         });
@@ -75,6 +76,9 @@ const startToListen = async (id) => {
 
 const run = async () => {
     await launchBrowser('about:blank'); 
+
+    // from time to time page is not ready when we list the tabs    
+    await delay(1000);
 
     cdp.List(function (err, targets) {
         if (!err) {

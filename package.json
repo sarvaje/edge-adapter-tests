@@ -1,0 +1,8 @@
+{
+    "name": "adapter",
+    "version": "1.0.0",
+    "dependencies": {
+        "chrome-remote-interface": "^0.23.2",
+        "edge-diagnostics-adapter": "file:..\\edge-diagnostics-adapter"
+    }
+}

@@ -35,10 +35,8 @@ const launchBrowser = async (url) => {
     return child2;
 }
 
-const run = async () => {
-    await launchBrowser('about:blank');
-
-    cdp(async (client) => {
+const startToListen = async (id) => {
+    cdp({target: id} , async (client) => {
         // extract domains
         const { Network, Page } = client;
         // setup handlers
@@ -75,4 +73,17 @@ const run = async () => {
     });
 }
 
+const run = async () => {
+    await launchBrowser('about:blank'); 
+
+    cdp.List(function (err, targets) {
+        if (!err) {
+            console.log(targets);
+            startToListen(targets[0].id);
+        }
+    });        
+}
+
 run();
+
+

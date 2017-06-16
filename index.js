@@ -77,7 +77,8 @@ const startToListen = async (id) => {
 const run = async () => {
     await launchBrowser('about:blank'); 
 
-    // from time to time page is not ready when we list the tabs    
+    // workaround to give time to the edge to load the tab
+    // retries seems the proper solution    
     await delay(1000);
 
     cdp.List(function (err, targets) {

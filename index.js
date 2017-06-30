@@ -55,6 +55,19 @@ const startToListen = async (id, port) => {
         Network.requestWillBeSent((params) => {
             console.log(params.request.url);
         });
+
+        Network.responseReceived(async (params) => {
+            console.log('getResponse!!');
+            try {
+                const { body, base64Encoded } = await Network.getResponseBody({ requestId: params.requestId });
+                const encoding = base64Encoded ? 'base64' : 'utf8';
+
+                content = body;
+                console.log(content.toString());
+            } catch (err) {
+                console.error(`Body requested error for request ${params.requestId}`)
+            }
+        });
         Page.loadEventFired(async () => {
             const { DOM } = client;
             console.log('load!!');
@@ -67,10 +80,11 @@ const startToListen = async (id, port) => {
             //html should have content
             const html = await DOM.getOuterHTML({ nodeId: document.root.nodeId });
             //html have the right value
-            const html2 = await DOM.getOuterHTML({ nodeId: document.root.children[1].nodeId});
+            const html2 = await DOM.getOuterHTML({ nodeId: document.root.children[1].nodeId });
+            const html3 = await DOM.getOuterHTML({ nodeId: document.root.children[0].nodeId });
             const elements = await DOM.querySelectorAll({ nodeId: document.root.nodeId, selector: 'div' });
             console.log('aham!!');
-            // client.close();
+            client.close();
         });
         // enable events then start!
         try {

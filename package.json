@@ -2,6 +2,7 @@
     "name": "adapter",
     "version": "1.0.0",
     "dependencies": {
+        "axe-core": "^2.3.1",
         "chrome-launcher": "^0.2.1",
         "chrome-remote-interface": "^0.23.2",
         "edge-diagnostics-adapter": "file:..\\edge-diagnostics-adapter"

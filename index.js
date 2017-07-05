@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const cdp = require('chrome-remote-interface');
 const cl = require('chrome-launcher');
+const axeCore = require('axe-core');
 
 const delay = (ms) => {
     return new Promise((resolve) => {
@@ -47,10 +48,35 @@ const launchBrowser = async (url) => {
     };
 }
 
+let axeConfig = {};
+const generateScript = () => {
+    // This is run in the page, not Sonar itself.
+    // axe.run returns a promise which fulfills with a results object
+    // containing any violations.
+    const script =
+        `function runA11yChecks() {
+    return window['axe'].run(document, ${JSON.stringify(axeConfig, null, 2)});
+}`;
+
+    return script;
+};
+
+function wrapRuntimeEvalErrorInBrowser(e) {
+    const err = e || new Error();
+    const fallbackMessage = typeof err === 'string' ? err : 'unknown error';
+
+    return {
+        __failedInBrowser: true,
+        message: err.message || fallbackMessage,
+        name: err.name || 'Error',
+        stack: err.stack || (new Error()).stack
+    };
+}
+
 const startToListen = async (id, port) => {
     cdp({ port, target: id }, async (client) => {
         // extract domains
-        const { Network, Page } = client;
+        const { Network, Page, Runtime } = client;
         // setup handlers
         Network.requestWillBeSent((params) => {
             console.log(params.request.url);
@@ -63,12 +89,15 @@ const startToListen = async (id, port) => {
                 const encoding = base64Encoded ? 'base64' : 'utf8';
 
                 content = body;
-                console.log(content.toString());
+
+                const rawContent = new Buffer(body, encoding);
+                console.log(`body requested for ${params.requestId}`);
             } catch (err) {
                 console.error(`Body requested error for request ${params.requestId}`)
             }
         });
         Page.loadEventFired(async () => {
+            await delay(2000);
             const { DOM } = client;
             console.log('load!!');
             // DOM.getDocument need a parameter depth
@@ -84,6 +113,39 @@ const startToListen = async (id, port) => {
             const html3 = await DOM.getOuterHTML({ nodeId: document.root.children[0].nodeId });
             const elements = await DOM.querySelectorAll({ nodeId: document.root.nodeId, selector: 'div' });
             console.log('aham!!');
+
+            const axeCore = fs.readFileSync(require.resolve('axe-core'));
+            const script = `(function () {
+    ${axeCore};
+    return (${generateScript()}());
+}())`;
+
+            const expression = `(function wrapInNativePromise() {
+          const __nativePromise = window.__nativePromise || Promise;
+          return new __nativePromise(function (resolve) {
+            return __nativePromise.resolve()
+              .then(_ => ${script})
+              .catch(${wrapRuntimeEvalErrorInBrowser.toString()})
+              .then(resolve);
+          });
+        }())`;
+
+            const result = await Runtime.evaluate({
+                awaitPromise: true,
+                // We need to explicitly wrap the raw expression for several purposes:
+                // 1. Ensure that the expression will be a native Promise and not a polyfill/non-Promise.
+                // 2. Ensure that errors in the expression are captured by the Promise.
+                // 3. Ensure that errors captured in the Promise are converted into plain-old JS Objects
+                //    so that they can be serialized properly b/c JSON.stringify(new Error('foo')) === '{}'
+                expression,
+                includeCommandLineAPI: true,
+                returnByValue: true
+            });
+
+            const value = result.result.value;
+
+            console.log(`There are ${value.violations.length} violations in the url`)
+
             client.close();
         });
         // enable events then start!
@@ -108,7 +170,7 @@ const startToListen = async (id, port) => {
             ]);
 
             console.log('navigating!');
-            Page.navigate({ url: 'http://edge.ms' });
+            Page.navigate({ url: 'https://testpilot.firefox.com' });
             console.log('after navigate');
         } catch (err) {
             console.error(err);

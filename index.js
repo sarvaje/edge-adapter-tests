@@ -130,6 +130,16 @@ const startToListen = async (id, port) => {
           });
         }())`;
 
+            const expressionWithError = `(function wrapInNativePromise() {
+          const __nativePromise = window.__nativePromise || Promise;
+          return new __nativePromise(function (resolve) {
+            return __nativePromise.resolve()
+              .then(_ => ${script})
+              .catch(function ${wrapRuntimeEvalErrorInBrowser.toString()})
+              .then(resolve);
+          });
+        }())`;
+
             const result = await Runtime.evaluate({
                 awaitPromise: true,
                 // We need to explicitly wrap the raw expression for several purposes:
@@ -145,6 +155,21 @@ const startToListen = async (id, port) => {
             const value = result.result.value;
 
             console.log(`There are ${value.violations.length} violations in the url`)
+
+            const resultError = await Runtime.evaluate({
+                awaitPromise: true,
+                // We need to explicitly wrap the raw expression for several purposes:
+                // 1. Ensure that the expression will be a native Promise and not a polyfill/non-Promise.
+                // 2. Ensure that errors in the expression are captured by the Promise.
+                // 3. Ensure that errors captured in the Promise are converted into plain-old JS Objects
+                //    so that they can be serialized properly b/c JSON.stringify(new Error('foo')) === '{}'
+                expression: expressionWithError,
+                includeCommandLineAPI: true,
+                returnByValue: true
+            });
+
+            console.log(`Exception detail text: ${resultError.exceptionDetails.text}`);
+            console.log(`className: ${resultError.result.className}`)
 
             client.close();
         });
@@ -183,21 +208,26 @@ const startToListen = async (id, port) => {
 }
 
 const run = async () => {
-    const browserInfo = await launchBrowser('https://sonarwhal.com');
+    const browserInfo = await launchChrome('https://sonarwhal.com');
 
     // workaround to give time to the edge to load the tab
     // retries seems the proper solution    
     await delay(3000);
 
-    cdp.List({ port: browserInfo.port }, function (err, targets) {
-        if (!err) {
-            const tab = targets.filter((target) => {
-                return !target.url.startsWith('chrome-extension');
-            })
-            console.log(targets);
-            startToListen(tab[0], browserInfo.port);
-        }
-    });
+    // cdp.List({ port: browserInfo.port }, function (err, targets) {
+    //     if (!err) {
+    //         const tab = targets.filter((target) => {
+    //             return !target.url.startsWith('chrome-extension');
+    //         })
+    //         console.log(targets);
+    //         startToListen(tab[0], browserInfo.port);
+    //     }
+    // });
+
+    //Open a new tab in the browser. cdp.New has to return the new tab.
+    const tab = await cdp.New({ port: browserInfo.port }); // eslint-disable-line new-cap
+
+    startToListen(tab, browserInfo.port);
 }
 
 run();
